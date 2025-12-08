@@ -4,6 +4,15 @@ from datetime import date
 import sys
 import os
 import time
+from dotenv import load_dotenv
+
+# Carrega variáveis do arquivo .env (Ambiente Local)
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+load_dotenv(env_path)
+
+# Debug no terminal (para sabermos se leu)
+senha_lida = os.getenv("APP_PASSWORD")
+print(f"DEBUG LOGIN: Senha lida do .env: {senha_lida}")
 
 # Adiciona path para importar modulos locais
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -25,17 +34,23 @@ def check_password():
 
     # Pega a senha dos secrets (Streamlit Cloud) ou usa padrão seguro para dev
     # No Streamlit Cloud, adicione: APP_PASSWORD = "sua_senha_secreta"
-    import os
+    # 1. Tenta pegar do st.secrets (Nuvem)
+    CORRECT_PASSWORD = None
     try:
-        # Tenta pegar do st.secrets (Cloud) ou variável de ambiente
-        CORRECT_PASSWORD = st.secrets.get("APP_PASSWORD") or os.getenv("APP_PASSWORD")
-    except:
-        CORRECT_PASSWORD = None
-        
-    # Se não tiver senha configurada, avisa (ou define uma padrão "admin" pra não travar local)
+        if "APP_PASSWORD" in st.secrets:
+            CORRECT_PASSWORD = st.secrets["APP_PASSWORD"]
+    except FileNotFoundError:
+        pass # Rodando local sem secrets.toml
+    except Exception:
+        pass # Outros erros de acesso
+
+    # 2. Se não achou nos secrets, tenta Variável de Ambiente (.env local)
     if not CORRECT_PASSWORD:
-        st.warning("⚠️ Senha de acesso não configurada nos Secrets (APP_PASSWORD).")
-        # Fallback apenas para não bloquear dev local se esquecer. Na nuvem, configure!
+        CORRECT_PASSWORD = os.getenv("APP_PASSWORD")
+
+    # 3. Fallback final (Admin)
+    if not CORRECT_PASSWORD:
+        st.warning("⚠️ Senha de acesso não configurada. Usando padrão local.")
         CORRECT_PASSWORD = "admin" 
 
     col1, col2, col3 = st.columns([1, 2, 1])

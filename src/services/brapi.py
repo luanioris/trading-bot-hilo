@@ -76,19 +76,20 @@ class BrapiClient:
             pass
         return {'longName': None, 'sector': None}
 
-    def get_historical_data(self, ticker: str, range: str = "3mo", interval: str = "1d"):
+    def get_historical_data(self, ticker: str, range: str = "3mo", interval: str = "1d", include_today: bool = True):
         """
         Busca dados históricos (candles) para um ticker.
         Params:
             ticker: Símbolo do ativo (ex: PETR4)
             range: Janela de dados (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
             interval: Intervalo dos candles (1m, 2m, 5m, 15m, 30m, 60m, 1d, 1wk, 1mo)
+            include_today: Se True, busca também o candle do dia atual (intraday)
         """
         params = {
             'token': self.token,
             'range': range,
             'interval': interval,
-            'fundamental': 'false', # Otimiza payload
+            'fundamental': 'false',
         }
         url = f"{self.BASE_URL}/quote/{ticker}"
         
@@ -96,10 +97,36 @@ class BrapiClient:
         response.raise_for_status()
         data = response.json()
         
-        # Validar se retornou resultados
         if 'results' not in data or not data['results']:
             print(f"⚠️ Sem dados para {ticker}")
             return None
 
-        # A Brapi retorna 'historicalDataPrice' dentro do primeiro resultado
-        return data['results'][0].get('historicalDataPrice', [])
+        historical = data['results'][0].get('historicalDataPrice', [])
+        
+        # Se quiser incluir o candle de hoje (ainda em formação)
+        if include_today and range != "1d":
+            try:
+                # Busca o candle intraday (hoje)
+                params_today = {
+                    'token': self.token,
+                    'range': '1d',
+                    'interval': '1d',
+                    'fundamental': 'false',
+                }
+                response_today = requests.get(url, params=params_today)
+                data_today = response_today.json()
+                
+                if 'results' in data_today and data_today['results']:
+                    today_candles = data_today['results'][0].get('historicalDataPrice', [])
+                    if today_candles:
+                        # Adiciona o candle de hoje ao final (se não estiver duplicado)
+                        last_historical_date = historical[-1]['date'] if historical else 0
+                        today_date = today_candles[-1]['date']
+                        
+                        if today_date > last_historical_date:
+                            historical.append(today_candles[-1])
+                            print(f"\t✅ Candle de hoje incluído para {ticker}")
+            except Exception as e:
+                print(f"\t⚠️ Não foi possível buscar candle de hoje: {e}")
+        
+        return historical
