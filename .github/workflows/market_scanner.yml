@@ -8,7 +8,8 @@ on:
     # Mercado abre 10h BR = 13h UTC
     # Mercado fecha 17h BR = 20h UTC
     # Cron syntax: "minuto hora dia mês dia-semana"
-    - cron: '30 13-20 * * 1-5'
+    # 17:10 Brasil = 20:10 UTC
+    - cron: '10 20 * * 1-5'
   
   # Permite rodar manualmente clicando num botão na aba Actions do GitHub
   workflow_dispatch:

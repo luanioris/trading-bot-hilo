@@ -14,6 +14,52 @@ from src.main import run_market_scan, is_cron_active
 # Configuração da Página
 st.set_page_config(page_title="Trading Bot B3", page_icon="📈", layout="wide")
 
+# --- AUTENTICAÇÃO SIMPLES ---
+def check_password():
+    """Retorna True se o usuário estiver logado com sucesso."""
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+        
+    if st.session_state["logged_in"]:
+        return True
+
+    # Pega a senha dos secrets (Streamlit Cloud) ou usa padrão seguro para dev
+    # No Streamlit Cloud, adicione: APP_PASSWORD = "sua_senha_secreta"
+    import os
+    try:
+        # Tenta pegar do st.secrets (Cloud) ou variável de ambiente
+        CORRECT_PASSWORD = st.secrets.get("APP_PASSWORD") or os.getenv("APP_PASSWORD")
+    except:
+        CORRECT_PASSWORD = None
+        
+    # Se não tiver senha configurada, avisa (ou define uma padrão "admin" pra não travar local)
+    if not CORRECT_PASSWORD:
+        st.warning("⚠️ Senha de acesso não configurada nos Secrets (APP_PASSWORD).")
+        # Fallback apenas para não bloquear dev local se esquecer. Na nuvem, configure!
+        CORRECT_PASSWORD = "admin" 
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("🔒 Acesso Restrito")
+        st.markdown("Por favor, identifique-se para acessar o painel de controle.")
+        password = st.text_input("Senha de Acesso", type="password")
+        
+        if st.button("Entrar", type="primary"):
+            if password == CORRECT_PASSWORD:
+                st.session_state["logged_in"] = True
+                st.toast("Login realizado com sucesso!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+            
+    return False
+
+if not check_password():
+    st.stop() # Interrompe o carregamento do resto da página
+
+# --- FIM AUTENTICAÇÃO ---
+
 # Conexão com Banco
 @st.cache_resource
 def init_db():
@@ -216,180 +262,67 @@ if page == "Carteira":
                         lucro_total = lucro_unit * qty_val
                         lucro_pct = (lucro_unit / entry_val * 100) if entry_val > 0 else 0
                         
-                        # Exibição Visual
-                        col_sim2.metric("Resultado Estimado %", f"{lucro_pct:.2f}%", delta=f"{lucro_pct:.2f}%")
-                        col_sim3.metric("Lucro/Prejuízo Financeiro", f"R$ {lucro_total:.2f}")
-                        
-                        st.caption(f"ℹ️ Para dobrar o capital (100%), você precisa vender a **R$ {target_100:.2f}**")
+                        st.metric(
+                            label=f"Resultado Projetado ({lucro_pct:.1f}%)", 
+                            value=f"R$ {lucro_total:.2f}",
+                            delta=f"{lucro_pct:.1f}%",
+                            delta_color="normal"
+                        )
                         
                         if lucro_pct >= 100:
-                            st.success("🚀 Cenário de META BATIDA!")
-                        elif lucro_pct < 0:
-                            st.error("📉 Cenário de Prejuízo.")
-                            
+                            st.balloons()
+                            st.success("🚀 ALVO DE 100% ATINGIDO NA SIMULAÇÃO!")
                 else:
-                    st.info("Sem operações abertas para simular.")
+                    st.info("Você não possui operações abertas para simular.")
 
-            st.write("---")
-            
-            # --- ÁREA DE GESTÃO DE OPERAÇÕES ---
+            # --- ENCERRAMENTO DE OPERAÇÕES ---
             st.divider()
-            st.subheader("🛠️ Gestão de Operações")
-            
-            tab_close, tab_edit, tab_del = st.tabs(["📉 Encerrar (Baixar)", "✏️ Editar", "🗑️ Excluir"])
-            
-            # --- ABA 1: ENCERRAR (Logica Original) ---
-            with tab_close:
+            st.subheader("🏁 Encerrar Operação (Real)")
+            with st.expander("Registrar Saída Definitiva"):
                 if not abertas.empty:
-                    map_opts_close = {
-                        f"{row['ticker_option']} ({row['type']}) | Início: {pd.to_datetime(row['entry_date']).strftime('%d/%m/%Y')} | Qtd: {row['quantity']}": row['id']
-                        for idx, row in abertas.iterrows()
-                    }
-                    sel_label_close = st.selectbox("Selecione para Baixar:", options=list(map_opts_close.keys()), key="sel_close")
+                    close_selection = st.selectbox("Selecione para Encerrar:", options=sim_opcoes, key="close_sel")
                     
-                    if sel_label_close:
-                        id_close = map_opts_close[sel_label_close]
-                        trade_data_c = df[df['id'] == id_close].iloc[0]
-                        
-                        with st.form("close_trade_form"):
-                            col_c1, col_c2 = st.columns(2)
-                            close_date = col_c1.date_input("DATA DE SAÍDA", date.today(), format="DD/MM/YYYY")
-                            price_received = col_c2.number_input("PREÇO DE SAÍDA (R$)", min_value=0.0, format="%.2f")
-                            
-                            if st.form_submit_button("✅ Confirmar Encerramento"):
-                                entry_p = float(trade_data_c['entry_price'])
-                                res_pct = ((price_received - entry_p) / entry_p * 100) if entry_p > 0 else 0.0
-                                res_val = (price_received - entry_p) * trade_data_c['quantity']
-                                
-                                up_dict = {
-                                    "exit_date": str(close_date),
-                                    "exit_price": price_received,
-                                    "result_percent": res_pct,
-                                    "result_value": res_val,
-                                    "status": "Encerrada"
-                                }
-                                supabase.table("portfolio").update(up_dict).eq("id", id_close).execute()
-                                st.toast("Encerrado com sucesso!", icon="📉")
-                                time.sleep(1.0)
-                                st.rerun()
+                    if close_selection:
+                         close_ticker = close_selection.split(" ")[0]
+                         close_data = abertas[abertas['ticker_option'] == close_ticker].iloc[0]
+                         
+                         with st.form("close_form"):
+                             st.write(f"Encerrando: **{close_ticker}**")
+                             st.write(f"Entrada: R$ {close_data['entry_price']}")
+                             
+                             c_price = st.number_input("Preço Final de Venda (R$)", min_value=0.0, format="%.2f")
+                             c_date = st.date_input("Data de Saída", date.today())
+                             
+                             confirm_close = st.form_submit_button("🚨 Confirmar Encerramento")
+                             
+                             if confirm_close:
+                                 # Lógica de Cálculo Final
+                                 entry = float(close_data['entry_price'])
+                                 exit_p = c_price
+                                 diff = exit_p - entry
+                                 qty_c = int(close_data['quantity'])
+                                 total_res = diff * qty_c
+                                 pct_res = (diff / entry * 100) if entry > 0 else 0
+                                 
+                                 # Update no Banco
+                                 supabase.table("portfolio").update({
+                                     "exit_price": exit_p,
+                                     "exit_date": str(c_date),
+                                     "result_value": total_res,
+                                     "result_percent": pct_res,
+                                     "status": "Encerrada"
+                                 }).eq("id", close_data['id']).execute()
+                                 
+                                 st.success(f"Operação encerrada! Lucro/Preju: {pct_res:.2f}%")
+                                 st.rerun()
                 else:
-                    st.info("Nada em aberto para baixar.")
-
-            # --- ABA 2: EDITAR ---
-            with tab_edit:
-                if not df.empty:
-                    # Mapeamento Amigável sem ID exposto
-                    map_opts_edit = {
-                        f"{row['ticker_option']} ({row['status']}) | Início: {pd.to_datetime(row['entry_date']).strftime('%d/%m/%Y')} | Qtd: {row['quantity']}": row['id']
-                        for idx, row in df.iterrows()
-                    }
-                    sel_label_edit = st.selectbox("Selecione para Corrigir:", options=list(map_opts_edit.keys()), key="sel_edit")
-                    
-                    if sel_label_edit:
-                        id_edit = map_opts_edit[sel_label_edit]
-                        curr_data = df[df['id'] == id_edit].iloc[0]
-                        
-                        with st.form("edit_trade_form"):
-                            st.markdown(f"#### 📝 Editando: {curr_data['ticker_option']}")
-                            
-                            # --- BLOCO 1: IDENTIFICAÇÃO ---
-                            st.caption("Identificação da Operação")
-                            c1, c2, c3, c4 = st.columns(4)
-                            new_asset = c1.text_input("Ativo Base", value=curr_data['ticker_asset'])
-                            new_ticker = c2.text_input("Cód. Opção", value=curr_data['ticker_option'])
-                            new_type = c3.selectbox("Estrutura", ["COMPRA DE CALL", "COMPRA DE PUT", "VENDA DE CALL", "VENDA DE PUT"], index=["COMPRA DE CALL", "COMPRA DE PUT", "VENDA DE CALL", "VENDA DE PUT"].index(curr_data['type']) if curr_data['type'] in ["COMPRA DE CALL", "COMPRA DE PUT", "VENDA DE CALL", "VENDA DE PUT"] else 0)
-                            
-                            try:
-                                exp_val = pd.to_datetime(curr_data['expiration_date']).date()
-                            except:
-                                exp_val = date.today()
-                            new_exp = c4.date_input("Vencimento", value=exp_val, format="DD/MM/YYYY")
-
-                            st.divider()
-
-                            # --- BLOCO 2: DADOS DE ENTRADA ---
-                            st.caption("Dados de Entrada")
-                            c5, c6, c7 = st.columns(3)
-                            new_date = c5.date_input("Data Início", pd.to_datetime(curr_data['entry_date']).date(), format="DD/MM/YYYY")
-                            new_price = c6.number_input("Preço Entrada (R$)", value=float(curr_data['entry_price']), format="%.2f", step=0.01)
-                            new_qty = c7.number_input("Quantidade", value=int(curr_data['quantity']), step=100)
-                            
-                            st.divider()
-
-                            # --- BLOCO 3: DADOS DE SAÍDA (Apenas se já houver ou quiser adicionar) ---
-                            st.caption("Dados de Saída (Opcional/Correção)")
-                            c8, c9 = st.columns(2)
-                            
-                            # Tratamento para valores nulos de saída
-                            try:
-                                out_date_val = pd.to_datetime(curr_data['exit_date']).date() if curr_data['exit_date'] else None
-                            except:
-                                out_date_val = None
-                            
-                            new_exit_date = c8.date_input("Data Saída", value=out_date_val, format="DD/MM/YYYY") if out_date_val else c8.date_input("Data Saída", value=None, format="DD/MM/YYYY")
-                            
-                            curr_exit_price = float(curr_data['exit_price']) if curr_data['exit_price'] else 0.0
-                            new_exit_price = c9.number_input("Preço Saída (R$)", value=curr_exit_price, format="%.2f", step=0.01)
-
-                            if st.form_submit_button("💾 Salvar Alterações Completas"):
-                                # Lógica de Update Inteligente
-                                up_edit = {
-                                    "ticker_asset": new_asset.upper(),
-                                    "ticker_option": new_ticker.upper(),
-                                    "type": new_type,
-                                    "expiration_date": str(new_exp),
-                                    "entry_date": str(new_date),
-                                    "entry_price": new_price,
-                                    "quantity": new_qty
-                                }
-                                
-                                # Se houve edição nos dados de saída, vamos recalcular o resultado
-                                if new_exit_price > 0:
-                                    # Recalcula Resultados
-                                    if new_price > 0:
-                                        res_pct = ((new_exit_price - new_price) / new_price * 100)
-                                    else:
-                                        res_pct = 0.0
-                                    
-                                    res_val = (new_exit_price - new_price) * new_qty
-                                    
-                                    up_edit.update({
-                                        "exit_price": new_exit_price,
-                                        "exit_date": str(new_exit_date) if new_exit_date else str(date.today()),
-                                        "result_percent": res_pct,
-                                        "result_value": res_val,
-                                        "status": "Encerrada"
-                                    })
-
-                                supabase.table("portfolio").update(up_edit).eq("id", id_edit).execute()
-                                
-                                st.toast(f"✅ Registro de {new_ticker} atualizado com sucesso!", icon="💾")
-                                time.sleep(1.5)
-                                st.rerun()
-                else:
-                    st.info("Carteira vazia.")
-
-            # --- ABA 3: EXCLUIR ---
-            with tab_del:
-                if not df.empty:
-                    sel_label_del = st.selectbox("Selecione para Excluir DEFINITIVAMENTE:", options=list(map_opts_edit.keys()), key="sel_del")
-                    
-                    if sel_label_del:
-                        st.error(f"⚠️ Você tem certeza que deseja apagar **{sel_label_del}**?")
-                        st.caption("Essa ação não pode ser desfeita.")
-                        
-                        if st.button("🗑️ Sim, apagar registro", type="primary"):
-                            id_del = map_opts_edit[sel_label_del]
-                            supabase.table("portfolio").delete().eq("id", id_del).execute()
-                            st.success("Registro apagado.")
-                            st.rerun()
-                
+                    st.info("Sem operações abertas.")
+        
         else:
-            st.info("Nenhuma operação registrada na carteira.")
-            
+             st.info("Nenhuma operação registrada ainda.")
+
     except Exception as e:
         st.error(f"Erro ao carregar carteira: {e}")
-
 
 # --- PÁGINA: SINAIS DO DIA ---
 elif page == "Sinais do Dia":
@@ -401,12 +334,9 @@ elif page == "Sinais do Dia":
         .eq("signal_date", str(selected_date))\
         .execute()
     
-    data = response.data
-    
-    if data:
-        for s in data:
-            # Correção: O campo no banco é 'direction' e não 'signal'
-            direction_label = s.get('direction', 'N/A')
+    if response.data:
+        for s in response.data:
+            direction_label = "🟢 ALTA" if "ALTA" in s.get('signal', '') else "🔴 BAIXA"
             price_val = float(s.get('price_at_signal', 0.0))
             
             with st.expander(f"{s['ticker']} - {direction_label} (R$ {price_val:.2f})"):
@@ -464,7 +394,7 @@ elif page == "Controle do Robô":
     config_now = load_config_status()
     # Usa o valor do json ou True se não existir
     is_active = config_now.get("cron_active", True)
-
+    
     # Status e Controle
     st.subheader("Status do Sistema")
     col_status, col_btn = st.columns([1, 3])
@@ -500,7 +430,7 @@ elif page == "Controle do Robô":
                     from contextlib import redirect_stdout
                     f = io.StringIO()
                     with redirect_stdout(f):
-                        run_market_scan()
+                         run_market_scan(is_manual_run=True)
                     output = f.getvalue()
                     
                     st.success("Análise concluída!")
@@ -542,33 +472,29 @@ elif page == "Controle do Robô":
 
     # Gestão de Ativos Monitorados
     st.subheader("📋 Ativos Monitorados")
-    try:
-        assets_response = supabase.table("assets").select("*").order("ticker").execute()
-        assets_df = pd.DataFrame(assets_response.data)
+    assets_response = supabase.table("assets").select("*").order("ticker").execute()
+    assets_df = pd.DataFrame(assets_response.data)
+    
+    if not assets_df.empty:
+        # Formatar data
+        if 'created_at' in assets_df.columns:
+            assets_df['created_at'] = pd.to_datetime(assets_df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            
+        # Renomear colunas para tabela
+        show_df = assets_df.rename(columns={
+            "ticker": "Ativo",
+            "name": "Nome",
+            "sector": "Setor",
+            "created_at": "Data Cadastro"
+        })
         
-        if not assets_df.empty:
-            # Formatar Data
-            if 'created_at' in assets_df.columns:
-                assets_df['created_at'] = pd.to_datetime(assets_df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+        col_list, col_add = st.columns([2, 1])
+        
+        with col_list:
+            st.dataframe(show_df[['Ativo', 'Nome', 'Setor', 'Data Cadastro']], use_container_width=True, hide_index=True)
             
-            # Selecionar e Renomear Colunas
-            display_cols = {
-                'ticker': 'Ativo',
-                'name': 'Nome',
-                'sector': 'Setor',
-                'created_at': 'Data Cadastro'
-            }
-            # Filtra apenas colunas que existem no DF
-            cols_to_show = [c for c in display_cols.keys() if c in assets_df.columns]
-            
-            df_show = assets_df[cols_to_show].rename(columns=display_cols)
-
-            col_list, col_add = st.columns([2, 1])
-            
-            with col_list:
-                st.dataframe(df_show, use_container_width=True, hide_index=True)
-                
-                # Remover Ativo
+            # Remover Ativo
+            if 'ticker' in assets_df.columns:
                 asset_to_remove = st.selectbox("Remover Ativo", assets_df['ticker'].tolist())
                 if st.button("🗑️ Remover"):
                     try:
@@ -596,10 +522,6 @@ elif page == "Controle do Robô":
                     except Exception as e:
                          st.error(f"Erro ao remover ativo: {e}")
 
-        else:
-             st.info("Nenhum ativo monitorado no momento.")
-             col_list, col_add = st.columns([2, 1])
-
         with col_add:
             st.write("**Adicionar Novo**")
             new_ticker = st.text_input("Ticker (ex: VALE3)").upper()
@@ -624,53 +546,43 @@ elif page == "Controle do Robô":
                     except Exception as e:
                         st.error(f"Erro: {e}")
 
-    except Exception as e:
-        st.error(f"Erro ao carregar ativos: {e}")
+    else:
+         st.info("Nenhum ativo monitorado no momento.")
 
 # --- PÁGINA: CONFIGURAÇÕES ---
 elif page == "Configurações":
     st.title("⚙️ Configurações")
     
-    # Simple Local Config Persistence (JSON)
+    st.info("Configurações do Robô armazenadas localmente.")
+    
+    # Carregar Configs Atuais
     import json
     CONFIG_FILE = "user_config.json"
     
-    def load_config():
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        return {"hilo_period": 10, "profit_target": 50.0, "phone": ""}
-
-    def save_config(cfg):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(cfg, f)
-
-    curr_config = load_config()
-
+    current_conf = {}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            current_conf = json.load(f)
+            
     with st.form("settings_form"):
         st.subheader("Parâmetros do Robô")
         
-        # HiLo Section
-        st.caption("Análise Técnica")
-        new_hilo = st.number_input("Período do HiLo (Padrão: 10)", value=int(curr_config.get("hilo_period", 10)), min_value=1)
+        st.write("Análise Técnica")
+        hilo_p = st.number_input("Período do HiLo (Padrão: 10)", value=int(current_conf.get("hilo_period", 10)), min_value=2)
         
-        st.divider()
-        
-        # Alerts Section
-        st.caption("Alertas e Notificações")
-        new_target = st.number_input("Meta de Lucro para Aviso (%)", value=float(curr_config.get("profit_target", 50.0)), step=5.0)
-        new_phone = st.text_input("Número WhatsApp (com DDD)", value=curr_config.get("phone", ""), placeholder="5511999999999")
-        
-        st.caption("Esses dados serão usados para filtrar oportunidades e enviar mensagens.")
+        st.write("Alertas e Notificações")
+        profit_t = st.number_input("Meta de Lucro para Aviso (%)", value=float(current_conf.get("profit_target", 50.0)), step=5.0)
+        phone_n = st.text_input("Número WhatsApp (com DDD)", value=current_conf.get("whatsapp_number", "55..."))
         
         if st.form_submit_button("💾 Salvar Configurações"):
-            new_cfg = {
-                "hilo_period": new_hilo,
-                "profit_target": new_target,
-                "phone": new_phone
-            }
-            save_config(new_cfg)
-            st.toast("✅ Configurações salvas!", icon="⚙️")
-            time.sleep(1)
-            st.rerun()
-
+            new_conf = current_conf.copy()
+            new_conf["hilo_period"] = hilo_p
+            new_conf["profit_target"] = profit_t
+            new_conf["whatsapp_number"] = phone_n
+            
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(new_conf, f)
+            
+            st.success("Configurações salvas com sucesso!")
+            # Opcional: Salvar no banco também se quiser backup na nuvem
+            # supabase.table("app_config").upsert(...)

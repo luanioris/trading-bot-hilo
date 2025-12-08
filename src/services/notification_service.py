@@ -7,9 +7,15 @@ from src.services.supabase_client import get_supabase_client
 
 class NotificationService:
     def __init__(self):
-        # URL e Key fornecidas pelo usuário
-        self.api_url = "https://fr-evolution.cloudfy.cloud/message/sendText/whats-pessoal-luan"
-        self.api_key = "HCpB8KZrD4GfzvApf8uYydMopc4XW9Qb"
+        # Carregar configurações do Ambiente (Prioridade) ou Fallback para código
+        base_url = os.getenv("EVOLUTION_API_URL", "https://fr-evolution.cloudfy.cloud")
+        instance = os.getenv("EVOLUTION_INSTANCE", "whats-pessoal-luan")
+        self.api_key = os.getenv("EVOLUTION_API_TOKEN", "HCpB8KZrD4GfzvApf8uYydMopc4XW9Qb")
+        
+        # Monta URL completa: {BASE}/message/sendText/{INSTANCE}
+        # Cuidado se a URL base já vier com barra no final
+        base_url = base_url.rstrip("/")
+        self.api_url = f"{base_url}/message/sendText/{instance}"
         
         # Conectar ao banco para pegar configuração dinâmica
         self.supabase = get_supabase_client()
