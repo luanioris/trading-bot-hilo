@@ -1,0 +1,44 @@
+name: Market Scanner Bot
+
+on:
+  schedule:
+    # Roda de Segunda a Sexta (1-5), das 10h as 17h, a cada 1 hora.
+    # Horário UTC! (10h UTC = 07h Brasil / 13h UTC = 10h Brasil)
+    # Ajuste: UTC é +3h em relação ao BR.
+    # Mercado abre 10h BR = 13h UTC
+    # Mercado fecha 17h BR = 20h UTC
+    # Cron syntax: "minuto hora dia mês dia-semana"
+    - cron: '30 13-20 * * 1-5'
+  
+  # Permite rodar manualmente clicando num botão na aba Actions do GitHub
+  workflow_dispatch:
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Baixar Código
+      uses: actions/checkout@v3
+
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Instalar Dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Executar Scanner
+      env:
+        # Segredos definidos no GitHub Repository Settings > Secrets
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        BRAPI_TOKEN: ${{ secrets.BRAPI_TOKEN }}
+        EVOLUTION_API_TOKEN: ${{ secrets.EVOLUTION_API_TOKEN }}
+        EVOLUTION_INSTANCE: ${{ secrets.EVOLUTION_INSTANCE }}
+        EVOLUTION_API_URL: ${{ secrets.EVOLUTION_API_URL }}
+      run: |
+        python src/main.py
