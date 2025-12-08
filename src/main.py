@@ -77,17 +77,22 @@ def run_market_scan(specific_tickers=None, is_manual_run=False):
     scanner = MarketScanner(hilo_period=hilo_p, profit_target=prof_t)
     
     # 5. Execução
+    daily_results = []
+    
     for ticker in tickers:
+        print(f"🔄 Processando {ticker} (HiLo {hilo_p})...")
         try:
-            print(f"🔄 Processando {ticker} (HiLo {hilo_p})...")
-            # is_manual_run força notificação? Normalmente não, só se for teste unitário.
-            # Aqui vamos deixar False, a menos que queiramos forçar.
-            # Se for manual run E specific_ticker, talvez o usuario queira ver o log.
-            # O scanner já tem logica interna de 'is_new' para notificar.
-            scanner.analyze_asset(ticker)
-            
+            result = scanner.analyze_asset(ticker)
+            if result:
+                daily_results.append(result)
         except Exception as e:
-            print(f"❌ Erro em {ticker}: {e}")
+            print(f"❌ Erro ao analisar {ticker}: {e}")
+            
+    # 6. Enviar Resumo Diário
+    # Só envia se analisou mais de 1 ativo (evita spam em testes de ticket único)
+    if daily_results and len(daily_results) > 1:
+        print("📨 Enviando Boletim Diário Resumido...")
+        scanner.notifier.send_daily_summary(daily_results)
             
     print("=== Fim da Análise ===")
 

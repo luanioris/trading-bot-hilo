@@ -13,7 +13,6 @@ class NotificationService:
         self.api_key = os.getenv("EVOLUTION_API_TOKEN", "HCpB8KZrD4GfzvApf8uYydMopc4XW9Qb")
         
         # Monta URL completa: {BASE}/message/sendText/{INSTANCE}
-        # Cuidado se a URL base já vier com barra no final
         base_url = base_url.rstrip("/")
         self.api_url = f"{base_url}/message/sendText/{instance}"
         
@@ -30,14 +29,13 @@ class NotificationService:
         except Exception as e:
             print(f"\t⚠️ Erro ao ler config de telefone: {e}")
         
-        return "5562981867784" # Fallback (seu número padrão)
+        return "5562981867784" # Fallback
 
     def send_signal_message(self, ticker, signal_type, option_data, exit_alert=None):
         """
         Formata e envia a mensagem do sinal via WhatsApp.
         :param exit_alert: Texto opcional com instrução de saída (gestão de carteira).
         """
-        
         emoji = "🚀" if "ALTA" in signal_type else "🔻"
         direction = "COMPRA (CALL)" if "ALTA" in signal_type else "VENDA (PUT)"
         
@@ -69,6 +67,7 @@ class NotificationService:
     def send_daily_summary(self, results):
         """
         Envia um relatório resumido com o status de TODOS os ativos analisados.
+        :param results: Lista de dicts com o resultado de cada ativo.
         """
         if not results:
             return False
@@ -77,25 +76,28 @@ class NotificationService:
         lines.append("📊 *RELATÓRIO DE FECHAMENTO* 📊")
         lines.append(f"📅 {date.today().strftime('%d/%m/%Y')}\n")
         
-        for r in results:
+        # Ordenar alfabeticamente
+        sorted_results = sorted(results, key=lambda x: x['ticker'])
+        
+        for r in sorted_results:
             ticker = r['ticker']
             price = f"R$ {r['close']:.2f}"
             
             # Ícone baseado no Status
             if r['trend'] == 'UP':
-                if r['signal']: # Virada de alta hoje
+                if r.get('signal'): # Virada de alta hoje
                     status = "🚀 *COMPRA (Novo)*"
                 else: 
-                    status = "🟢 Segue Alta"
+                    status = "🟢 Segue Tendência de Alta"
             else:
-                if r['signal']: # Virada de baixa hoje
+                if r.get('signal'): # Virada de baixa hoje
                     status = "🔻 *VENDA (Novo)*"
                 else:
-                    status = "🔴 Segue Baixa"
+                    status = "🔴 Segue Tendência de Baixa"
             
             lines.append(f"*{ticker}* ({price}): {status}")
             
-        lines.append(f"\n_Total analisados: {len(results)}_")
+        lines.append(f"\n_Total monitorados: {len(results)}_")
         
         full_text = "\n".join(lines)
         return self._send_whatsapp(full_text)
@@ -126,7 +128,6 @@ class NotificationService:
             print(f"\t❌ Falha na conexão com WhatsApp: {e}")
             return False
 
-# Teste rápido se rodar direto
 if __name__ == "__main__":
     svc = NotificationService()
     svc._send_whatsapp("🤖 Teste de conexão: Trading Bot Ativo!")
