@@ -2,13 +2,10 @@ name: Market Scanner Bot
 
 on:
   schedule:
-    # Roda de Segunda a Sexta (1-5), das 10h as 17h, a cada 1 hora.
-    # Horário UTC! (10h UTC = 07h Brasil / 13h UTC = 10h Brasil)
-    # Ajuste: UTC é +3h em relação ao BR.
-    # Mercado abre 10h BR = 13h UTC
-    # Mercado fecha 17h BR = 20h UTC
-    # Cron syntax: "minuto hora dia mês dia-semana"
-    # 17:10 Brasil = 20:10 UTC
+    # Execução 1: Meio do Pregão (11:00 Brasil = 14:00 UTC)
+    - cron: '0 14 * * 1-5'
+    
+    # Execução 2: Fechamento (17:10 Brasil = 20:10 UTC)
     - cron: '10 20 * * 1-5'
   
   # Permite rodar manualmente clicando num botão na aba Actions do GitHub
