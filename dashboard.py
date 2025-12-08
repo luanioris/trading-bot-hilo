@@ -354,23 +354,40 @@ elif page == "Sinais do Dia":
                     st.write(f"**Strike:** {op.get('strike')}")
                     st.write(f"**Vencimento:** {op.get('expiration_date')}")
                     
-                    # Botão de Reenvio Manual
-                    if st.button("📲 Reenviar WhatsApp", key=f"resend_{s['id']}"):
-                        from src.services.notification_service import NotificationService
-                        svc = NotificationService()
-                        
-                        # Reconstruir objeto option_data
-                        opt_data_resend = {
-                            "ticker": op.get('ticker_option'),
-                            "strike": op.get('strike'),
-                            "last_price": op.get('premium_at_signal', 0.0),
-                            "dte": op.get('days_to_expire'),
-                            "trades": 0 
-                        }
-                        
-                        # Passamos 'direction_label' como signal
-                        svc.send_signal_message(s['ticker'], direction_label, opt_data_resend)
-                        st.toast("Mensagem reenviada!")
+                    col_resend, col_del = st.columns([1, 1])
+                    
+                    with col_resend:
+                        # Botão de Reenvio Manual
+                        if st.button("📲 Reenviar Zap", key=f"resend_{s['id']}"):
+                            from src.services.notification_service import NotificationService
+                            svc = NotificationService()
+                            
+                            # Reconstruir objeto option_data
+                            opt_data_resend = {
+                                "ticker": op.get('ticker_option'),
+                                "strike": op.get('strike'),
+                                "last_price": op.get('premium_at_signal', 0.0),
+                                "dte": op.get('days_to_expire'),
+                                "trades": 0 
+                            }
+                            
+                            # Passamos 'direction_label' como signal
+                            svc.send_signal_message(s['ticker'], direction_label, opt_data_resend)
+                            st.toast("Mensagem reenviada!")
+
+                    with col_del:
+                        if st.button("🗑️ Excluir Sinal", key=f"del_{s['id']}"):
+                            try:
+                                # 1. Remover dependências (Oportunidades)
+                                supabase.table("option_opportunities").delete().eq("signal_id", s['id']).execute()
+                                # 2. Remover o Sinal
+                                supabase.table("signals").delete().eq("id", s['id']).execute()
+                                
+                                st.success("Sinal removido!")
+                                time.sleep(0.5)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao excluir: {e}")
 
                 else:
                     st.warning("Dados da opção não encontrados.")
