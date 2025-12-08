@@ -336,13 +336,22 @@ elif page == "Sinais do Dia":
     
     if response.data:
         for s in response.data:
-            direction_label = "🟢 ALTA" if "ALTA" in s.get('signal', '') else "🔴 BAIXA"
+            # Lógica para descrição mais clara da tendência
+            raw_signal = s.get('signal', '')
+            if "ALTA" in raw_signal:
+                direction_label = "🟢 VIRADA PARA ALTA (Compra)"
+                trend_desc = "Mudança de Tendência: 📉 Baixa ➔ 📈 Alta"
+            else:
+                direction_label = "🔴 VIRADA PARA BAIXA (Venda)"
+                trend_desc = "Mudança de Tendência: 📈 Alta ➔ 📉 Baixa"
+            
             price_val = float(s.get('price_at_signal', 0.0))
             
-            with st.expander(f"{s['ticker']} - {direction_label} (R$ {price_val:.2f})"):
-                op_raw = s.get('option_opportunities')
+            with st.expander(f"{s['ticker']} - {direction_label} (Cotação: R$ {price_val:.2f})"):
+                st.markdown(f"**{trend_desc}**")
                 
-                # Tratamento robusto: se for lista, pega o primeiro item. Se for dict, usa direto.
+                op_raw = s.get('option_opportunities')
+                # Tratamento robusto
                 op = None
                 if isinstance(op_raw, list) and len(op_raw) > 0:
                     op = op_raw[0]
@@ -350,9 +359,19 @@ elif page == "Sinais do Dia":
                     op = op_raw
                     
                 if op:
-                    st.write(f"**Opção Sugerida:** {op.get('ticker_option')}")
-                    st.write(f"**Strike:** {op.get('strike')}")
-                    st.write(f"**Vencimento:** {op.get('expiration_date')}")
+                    # Formatação de Data
+                    date_obj = pd.to_datetime(op.get('expiration_date'))
+                    date_fmt = date_obj.strftime('%d/%m/%Y')
+                    
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        st.write(f"**Opção:** `{op.get('ticker_option')}`")
+                        st.write(f"**Vencimento:** {date_fmt}")
+                    with col_info2:
+                        st.write(f"**Strike/Alvo:** R$ {op.get('strike'):.2f}")
+                        price_opt = op.get('premium_at_signal', 0.0) or 0.0
+                        st.write(f"**Prêmio Estimado:** R$ {price_opt:.2f}")
+                    
                     
                     col_resend, col_del = st.columns([1, 1])
                     
