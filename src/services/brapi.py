@@ -79,12 +79,11 @@ class BrapiClient:
     def get_historical_data(self, ticker: str, range: str = "3mo", interval: str = "1d", include_today: bool = True):
         """
         Busca dados históricos (candles) para um ticker.
-        Params:
-            ticker: Símbolo do ativo (ex: PETR4)
-            range: Janela de dados (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
-            interval: Intervalo dos candles (1m, 2m, 5m, 15m, 30m, 60m, 1d, 1wk, 1mo)
-            include_today: Se True, busca também o candle do dia atual (intraday)
+        Se include_today=True, adiciona um candle sintético com a cotação atual.
         """
+        from datetime import datetime, date as dt_date
+        import time
+        
         params = {
             'token': self.token,
             'range': range,
@@ -101,32 +100,37 @@ class BrapiClient:
             print(f"⚠️ Sem dados para {ticker}")
             return None
 
-        historical = data['results'][0].get('historicalDataPrice', [])
+        result = data['results'][0]
+        historical = result.get('historicalDataPrice', [])
         
-        # Se quiser incluir o candle de hoje (ainda em formação)
-        if include_today and range != "1d":
-            try:
-                # Busca o candle intraday (hoje)
-                params_today = {
-                    'token': self.token,
-                    'range': '1d',
-                    'interval': '1d',
-                    'fundamental': 'false',
-                }
-                response_today = requests.get(url, params=params_today)
-                data_today = response_today.json()
+        # Se quiser incluir dados de hoje
+        if include_today and historical:
+            last_candle_date = datetime.fromtimestamp(historical[-1]['date']).date()
+            today = dt_date.today()
+            
+            # Se o último candle não é de hoje, criar candle sintético
+            if last_candle_date < today:
+                # Buscar cotação atual (tempo real)
+                current_price = result.get('regularMarketPrice')
                 
-                if 'results' in data_today and data_today['results']:
-                    today_candles = data_today['results'][0].get('historicalDataPrice', [])
-                    if today_candles:
-                        # Adiciona o candle de hoje ao final (se não estiver duplicado)
-                        last_historical_date = historical[-1]['date'] if historical else 0
-                        today_date = today_candles[-1]['date']
-                        
-                        if today_date > last_historical_date:
-                            historical.append(today_candles[-1])
-                            print(f"\t✅ Candle de hoje incluído para {ticker}")
-            except Exception as e:
-                print(f"\t⚠️ Não foi possível buscar candle de hoje: {e}")
+                if current_price and current_price > 0:
+                    # Criar candle sintético de hoje
+                    # Timestamp de hoje às 18h (fechamento aproximado)
+                    today_timestamp = int(datetime.combine(today, datetime.min.time()).timestamp())
+                    
+                    synthetic_candle = {
+                        'date': today_timestamp,
+                        'open': current_price,  # Aproximação
+                        'high': current_price,  # Aproximação
+                        'low': current_price,   # Aproximação  
+                        'close': current_price,
+                        'volume': 0,  # Não temos volume intraday
+                        'adjustedClose': current_price
+                    }
+                    
+                    historical.append(synthetic_candle)
+                    print(f"\t✅ Candle sintético de hoje criado para {ticker} (R$ {current_price:.2f})")
+                else:
+                    print(f"\t⚠️ Cotação atual não disponível para {ticker}")
         
         return historical

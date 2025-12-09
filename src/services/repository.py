@@ -11,10 +11,11 @@ class Repository:
         Verifica duplicidade para não salvar o mesmo sinal repetido no dia.
         """
         if not analysis_result.get('signal'):
-            return None
+            return None, False
 
         ticker = analysis_result['ticker']
-        signal_date = analysis_result['date'].strftime('%Y-%m-%d')
+        # CORREÇÃO: Usar a data de HOJE (execução) e não a data do último candle
+        signal_date = date.today().strftime('%Y-%m-%d')
         direction = "BUY" if "ALTA" in analysis_result['signal'] else "SELL"
         
         print(f"\t💾 Verificando duplicidade para {ticker} em {signal_date}...")

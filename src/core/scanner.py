@@ -19,8 +19,10 @@ class MarketScanner:
         """
         Analisa um ativo específico para buscar sinais de HiLo e gerenciar posições.
         """
-        # 1. Buscar dados históricos
-        raw_data = self.brapi.get_historical_data(ticker, range='3mo', interval='1d')
+        from datetime import date as dt_date
+        
+        # 1. Buscar dados históricos (SEM candle sintético para não distorcer HiLo)
+        raw_data = self.brapi.get_historical_data(ticker, range='3mo', interval='1d', include_today=False)
         
         if not raw_data:
             return None
@@ -30,19 +32,39 @@ class MarketScanner:
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], unit='s', errors='coerce')
         
-        # 3. Aplicar HiLo com período dinâmico
+        # 3. Aplicar HiLo com período dinâmico (usando dados históricos puros)
         df_hilo = Indicators.calculate_hilo(df, period=self.hilo_period)
         
-        # 4. Analisar último candle
+        # 4. Analisar último candle HISTÓRICO
         last_candle = df_hilo.iloc[-1]
         prev_candle = df_hilo.iloc[-2]
         
+        # 5. Buscar COTAÇÃO ATUAL (tempo real) para comparação
+        current_quotes = self.brapi.get_quotes([ticker])
+        current_price = current_quotes.get(ticker)
+        
+        if not current_price:
+            # Se não conseguiu cotação atual, usa o último histórico
+            current_price = float(last_candle['close'])
+            print(f"\t⚠️ Usando preço histórico para {ticker}: R$ {current_price:.2f}")
+        else:
+            print(f"\t📊 Cotação atual de {ticker}: R$ {current_price:.2f}")
+        
         signal = None
         
-        # Detectar flip
-        if prev_candle['trend'] == -1 and last_candle['trend'] == 1:
+        # 6. Detectar flip comparando TENDÊNCIA ANTERIOR vs POSIÇÃO ATUAL DO PREÇO
+        # O HiLo foi calculado até ontem/último dia disponível
+        # Agora vemos se o preço ATUAL está acima ou abaixo do HiLo
+        hilo_value = float(last_candle['hilo'])
+        
+        # Determinar tendência atual baseada no preço de agora
+        current_trend = 1 if current_price > hilo_value else -1
+        previous_trend = int(last_candle['trend'])
+        
+        # Detectar virada
+        if previous_trend == -1 and current_trend == 1:
             signal = "VIRADA PARA ALTA (Compra)"
-        elif prev_candle['trend'] == 1 and last_candle['trend'] == -1:
+        elif previous_trend == 1 and current_trend == -1:
             signal = "VIRADA PARA BAIXA (Venda)"
             
         suggested_option = None
@@ -54,16 +76,16 @@ class MarketScanner:
             if options_chain:
                 suggested_option = self.selector.filter_options(
                     options_chain, 
-                    last_candle['close'], 
+                    current_price,  # Usar preço ATUAL, não histórico
                     signal
                 )
             
         result = {
             "ticker": ticker,
-            "date": last_candle['date'],
-            "close": last_candle['close'],
-            "hilo": last_candle['hilo'],
-            "trend": "UP" if last_candle['trend'] == 1 else "DOWN",
+            "date": datetime.now(),  # Data/hora ATUAL da análise
+            "close": current_price,  # Preço ATUAL
+            "hilo": hilo_value,
+            "trend": "UP" if current_trend == 1 else "DOWN",
             "signal": signal,
             "option": suggested_option
         }
