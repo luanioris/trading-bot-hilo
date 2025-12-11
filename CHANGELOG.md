@@ -1,5 +1,8 @@
 
-## [09/12/2024] - Ajuste Final de Agendamento
+## [10/12/2024] - Ajuste de Horário (Refinamento)
+
+### Alterado
+- **Horário do Cron:** Ajustado para **17:25 BRT (20:25 UTC)** a pedido do usuário, para garantir que o mercado já esteja fechado e com dados mais consolidados.
 
 ### Alterado
 - **Horário do Cron:** Ajustado para execução única diária às **16:50 BRT (19:50 UTC)**. 
