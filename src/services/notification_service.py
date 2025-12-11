@@ -64,6 +64,19 @@ class NotificationService:
         
         return self._send_whatsapp(message_text)
 
+    def send_error_alert(self, error_msg):
+        """
+        Envia alerta crítico de falha no sistema.
+        """
+        msg_date = date.today().strftime('%d/%m/%Y %H:%M')
+        text = (
+            f"🚨 *ERRO CRÍTICO NO ROBÔ* 🚨\n"
+            f"📅 {msg_date}\n\n"
+            f"⚠️ *Detalhe:* {error_msg}\n\n"
+            f"_A execução foi interrompida. Verifique os logs._"
+        )
+        return self._send_whatsapp(text)
+
     def send_daily_summary(self, results):
         """
         Envia um relatório resumido com o status de TODOS os ativos analisados.
