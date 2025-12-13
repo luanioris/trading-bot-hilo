@@ -67,14 +67,16 @@ class OptionsSelector:
             ), axis=1
         )
 
-        # 6. Filtrar Range Delta 0.42 - 0.50
+        # 6. Filtrar Range Delta 0.40 - 0.50 (User Request)
         if target_type == "CALL":
-            mask = (df_type['delta_bs'] >= 0.42) & (df_type['delta_bs'] <= 0.53) # Margem leve superior
-            target_delta = 0.46
+            # Alvo: 0.40 a 0.50 (com leve margem superior)
+            mask = (df_type['delta_bs'] >= 0.39) & (df_type['delta_bs'] <= 0.53) 
+            target_delta = 0.40
         else:
-            # PUT (Deltas negativos) -0.50 a -0.42
-            mask = (df_type['delta_bs'] >= -0.53) & (df_type['delta_bs'] <= -0.42)
-            target_delta = -0.46
+            # PUT (Deltas negativos): -0.40 a -0.50
+            # Note: 0.40 delta put means -0.40
+            mask = (df_type['delta_bs'] >= -0.53) & (df_type['delta_bs'] <= -0.39)
+            target_delta = -0.40
             
         candidates = df_type[mask].copy()
         
@@ -93,7 +95,8 @@ class OptionsSelector:
             print(f"⚠️ Opções encontradas no Delta, mas sem liquidez.")
             return None
 
-        # Ordenar: Mais próximo do Delta 0.46, desempate por Liquidez
+        # Ordenar: Mais próximo do Delta 0.40 (User Request), desempate por Liquidez
+        # O usuário quer priorizar o delta mais próximo de 0.40 e ir subindo.
         candidates['dist_to_target'] = abs(candidates['delta_bs'] - target_delta)
         
         best_option = candidates.sort_values(

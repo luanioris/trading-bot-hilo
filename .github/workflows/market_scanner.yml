@@ -2,8 +2,8 @@ name: Market Scanner Bot
 
 on:
   schedule:
-    # Execução Principal: Fechamento (17:25 Brasil = 20:25 UTC)
-    - cron: '25 20 * * 1-5'
+    # Execução Principal: Fechamento (17:10 Brasil = 20:10 UTC)
+    - cron: '10 20 * * 1-5'
   
   # Permite rodar manualmente clicando num botão na aba Actions do GitHub
   workflow_dispatch:

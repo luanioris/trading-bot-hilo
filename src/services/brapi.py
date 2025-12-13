@@ -103,6 +103,35 @@ class BrapiClient:
         result = data['results'][0]
         historical = result.get('historicalDataPrice', [])
         
+        # Sanitize data: Ensure High and Low are never 0
+        for candle in historical:
+            o = candle.get('open', 0)
+            h = candle.get('high', 0)
+            l = candle.get('low', 0)
+            c = candle.get('close', 0)
+            
+            # Se High ou Low estiverem zerados, corrigir
+            if h <= 0 or l <= 0:
+                print(f"\t⚠️ Dados inconsistentes para {ticker} em {datetime.fromtimestamp(candle['date']).strftime('%d/%m/%Y')}: H={h}, L={l}. Corrigindo...")
+                
+                # Se open for 0, usa close como fallback
+                if o <= 0:
+                    o = c
+                    candle['open'] = o
+                
+                valid_vals = [x for x in [o, c] if x > 0]
+                if valid_vals:
+                    # Se High inválido, pega o maior entre open e close
+                    if h <= 0:
+                        candle['high'] = max(valid_vals)
+                    # Se Low inválido, pega o menor entre open e close
+                    if l <= 0:
+                        candle['low'] = min(valid_vals)
+                    
+                    # Garantir integridade básica (H >= L)
+                    if candle['high'] < candle['low']:
+                         candle['high'] = candle['low']
+
         # Se quiser incluir dados de hoje
         if include_today and historical:
             last_candle_date = datetime.fromtimestamp(historical[-1]['date']).date()

@@ -101,12 +101,19 @@ class NotificationService:
                 if r.get('signal'): # Virada de alta hoje
                     status = "🚀 *COMPRA (Novo)*"
                 else: 
-                    status = "🟢 Segue Tendência de Alta"
+                    # Verifica proximidade
+                    if r.get('is_proximity_warning'):
+                        status = "⚠️ *ALERTA (Próximo Reversão)*"
+                    else:
+                        status = "🟢 Segue Tendência de Alta"
             else:
                 if r.get('signal'): # Virada de baixa hoje
                     status = "🔻 *VENDA (Novo)*"
                 else:
-                    status = "🔴 Segue Tendência de Baixa"
+                    if r.get('is_proximity_warning'):
+                        status = "⚠️ *ALERTA (Próximo Reversão)*"
+                    else:
+                        status = "🔴 Segue Tendência de Baixa"
             
             lines.append(f"*{ticker}* ({price}): {status}")
             

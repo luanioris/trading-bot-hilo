@@ -496,7 +496,7 @@ elif page == "Consultar Opções":
                                 # --- LADO ESQUERDO: REGRA MANUAL (Consultor) ---
                                 with col_manual:
                                     st.markdown("### 🛠️ Regra Manual")
-                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.42-0.50** (Black-Scholes Vol. 32%) | Liquidez")
+                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40-0.50** (Black-Scholes Vol. 32%) | Liquidez")
                                     
                                     # --- CALCULADORA BLACK-SCHOLES INTERNA ---
                                     # Como a API bloqueia as gregas (VolBlur), calculamos internamente.
@@ -536,19 +536,19 @@ elif page == "Consultar Opções":
                                             ), axis=1
                                         )
                                         
-                                        # LÓGICA ROBUSTA: Range Delta 0.42 - 0.50
+                                        # LÓGICA ROBUSTA: Range Delta 0.40 - 0.53
                                         if opt_type == "CALL":
-                                            mask = (df_type['delta_bs'] >= 0.42) & (df_type['delta_bs'] <= 0.50)
-                                            target_delta = 0.46 # Centro do alvo
+                                            mask = (df_type['delta_bs'] >= 0.39) & (df_type['delta_bs'] <= 0.53)
+                                            target_delta = 0.40 # Foco em 0.40
                                         else:
-                                            # Put: -0.50 a -0.42
-                                            mask = (df_type['delta_bs'] >= -0.50) & (df_type['delta_bs'] <= -0.42)
-                                            target_delta = -0.46
+                                            # Put: -0.53 a -0.40
+                                            mask = (df_type['delta_bs'] >= -0.53) & (df_type['delta_bs'] <= -0.39)
+                                            target_delta = -0.40
                                             
                                         candidates = df_type[mask].copy()
                                         
                                         if candidates.empty:
-                                            st.warning(f"Nenhuma opção com Delta Estimado entre 0.42-0.50.")
+                                            st.warning(f"Nenhuma opção com Delta Estimado entre 0.40-0.50.")
                                             # Mostrar sugestões próximas?
                                             # st.write(df_type[['strike', 'delta_bs']].sort_values('delta_bs').head())
                                         else:
@@ -560,7 +560,7 @@ elif page == "Consultar Opções":
                                             if candidates.empty:
                                                 st.warning("Opções no range de Delta existem, mas sem liquidez.")
                                             else:
-                                                # Ordenar por proximidade ao Delta Alvo (0.46), depois Liquidez
+                                                # Ordenar por proximidade ao Delta Alvo (0.40), depois Liquidez
                                                 candidates['dist_to_target'] = abs(candidates['delta_bs'] - target_delta)
                                                 
                                                 candidates = candidates.sort_values(

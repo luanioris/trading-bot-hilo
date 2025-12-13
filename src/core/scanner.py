@@ -60,6 +60,11 @@ class MarketScanner:
         # Determinar tendência atual baseada no preço de agora
         current_trend = 1 if current_price > hilo_value else -1
         previous_trend = int(last_candle['trend'])
+
+        # Proximity Check (0.5%)
+        # Calculate absolute percentage distance to HiLo
+        proximity_pct = abs(current_price - hilo_value) / current_price if current_price > 0 else 1.0
+        is_proximity_warning = proximity_pct < 0.005 # Menor que 0.5%
         
         # Detectar virada
         if previous_trend == -1 and current_trend == 1:
@@ -87,7 +92,8 @@ class MarketScanner:
             "hilo": hilo_value,
             "trend": "UP" if current_trend == 1 else "DOWN",
             "signal": signal,
-            "option": suggested_option
+            "option": suggested_option,
+            "is_proximity_warning": is_proximity_warning
         }
         
         # --- VERIFICAÇÃO DE GESTÃO (Sinal ou Monitoramento de Lucro) ---
