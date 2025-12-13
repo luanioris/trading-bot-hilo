@@ -61,16 +61,36 @@ class MarketScanner:
         current_trend = 1 if current_price > hilo_value else -1
         previous_trend = int(last_candle['trend'])
 
+        # --- LOG VERBOSO RESTAURADO ---
+        print(f"\n--- 🔍 Análise Detalhada: {ticker} ---")
+        date_str = last_candle['date'].strftime('%d/%m/%Y') if hasattr(last_candle['date'], 'strftime') else str(last_candle['date'])
+        print(f"1. Último Fechamento ({date_str}): R$ {last_candle['close']:.2f}")
+        print(f"   SMA High (Teto): {last_candle.get('sma_high', 0):.2f} | SMA Low (Piso): {last_candle.get('sma_low', 0):.2f}")
+        
+        trend_label = "ALTA 🟢" if previous_trend == 1 else "BAIXA 🔴"
+        print(f"2. Tendência Anterior: {trend_label}")
+        print(f"3. Cotação Atual: R$ {current_price:.2f} (Tempo Real)")
+        print(f"   HiLo Ativo (Stop): R$ {hilo_value:.2f}")
+        # ------------------------------
+
         # Proximity Check (0.5%)
         # Calculate absolute percentage distance to HiLo
         proximity_pct = abs(current_price - hilo_value) / current_price if current_price > 0 else 1.0
         is_proximity_warning = proximity_pct < 0.005 # Menor que 0.5%
+        
+        warn_msg = "⚠️ ALERTA: Próximo da Reversão!" if is_proximity_warning else "OK (Distância segura)"
+        print(f"   Distância do HiLo: {proximity_pct*100:.2f}% -> {warn_msg}")
         
         # Detectar virada
         if previous_trend == -1 and current_trend == 1:
             signal = "VIRADA PARA ALTA (Compra)"
         elif previous_trend == 1 and current_trend == -1:
             signal = "VIRADA PARA BAIXA (Venda)"
+            
+        if signal:
+            print(f"4. Diagnóstico: 🚨 DETECTADO {signal}")
+        else:
+            print(f"4. Diagnóstico: Tendência Mantida (Sem Sinais)")
             
         suggested_option = None
         
