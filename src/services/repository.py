@@ -62,9 +62,9 @@ class Repository:
                 "option_type": opt['type'],
                 "strike": float(opt['strike']),
                 "expiration_date": opt['expiration'],
-                "premium_at_signal": float(opt.get('last_price', 0.0)), # Preço capturado da Opcoes.net
-                "distance_to_strike": float(opt['distance']),
-                "days_to_expire": int(opt['dte'])
+                "premium_at_signal": float(opt.get('last_price', 0.0)),
+                "distance_to_strike": float(opt.get('distance', 0.0)),
+                "days_to_expire": int(opt.get('dte', 0))
             }
             
             self.supabase.table("option_opportunities").insert(option_payload).execute()
