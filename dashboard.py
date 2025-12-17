@@ -496,7 +496,8 @@ elif page == "Consultar Opções":
                                 # --- LADO ESQUERDO: REGRA MANUAL (Consultor) ---
                                 with col_manual:
                                     st.markdown("### 🛠️ Regra Manual")
-                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40-0.50** (Black-Scholes Vol. 32%) | Liquidez")
+                                    st.markdown("### 🛠️ Regra Manual")
+                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40** (Foco) | Liquidez")
                                     
                                     # --- CALCULADORA BLACK-SCHOLES INTERNA ---
                                     # Como a API bloqueia as gregas (VolBlur), calculamos internamente.
