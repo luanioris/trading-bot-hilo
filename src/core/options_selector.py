@@ -43,11 +43,17 @@ class OptionsSelector:
         today = pd.Timestamp.now().normalize()
         df['dte'] = (df['expirationDate'] - today).dt.days
         
-        # 3. Filtrar Vencimento (Janela Segura)
-        df_valid = df[(df['dte'] >= 25) & (df['dte'] <= 80)].copy()
+        # 3. Filtrar Vencimento (Janela Segura e Mensal)
+        # Regra alinhada com Dashboard Manual (Opção Mensal Tradicional)
+        df_valid = df[
+            (df['dte'] >= 28) & 
+            (df['dte'] <= 80) & 
+            (df['expirationDate'].dt.day >= 15) & 
+            (df['expirationDate'].dt.day <= 22)
+        ].copy()
         
         if df_valid.empty:
-            print("⚠️ Nenhuma opção com vencimento entre 25-80 dias.")
+            print("⚠️ Nenhuma opção com vencimento mensal entre 28-80 dias.")
             return None
 
         # 4. Filtrar pelo Tipo (CALL ou PUT)
