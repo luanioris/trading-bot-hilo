@@ -112,5 +112,6 @@ class OptionsSelector:
             "dte": best_option['dte'],
             "trades": int(best_option.get('trades', 0)),
             "last_price": float(best_option.get('lastPrice', 0.0)),
-            "delta_bs": float(best_option['delta_bs'])
+            "delta_bs": float(best_option['delta_bs']),
+            "distance": ((float(best_option['strike']) - current_price) / current_price) * 100
         }
