@@ -174,7 +174,7 @@ class MarketScanner:
                     # Mock payload para não quebrar notification service
                     opt_payload = {'ticker_option': 'GESTÃO', 'strike': 0, 'last_price': 0, 'days_to_expire': 0}
 
-                if should_notify and opt_payload:
+                if should_notify:
                     print("\t📲 Enviando notificação via WhatsApp...")
                     # Se não tiver sinal (só gestão), manda "MONITORAMENTO" como título
                     sig_title = signal if signal else "MONITORAMENTO DE CARTEIRA"
@@ -182,7 +182,7 @@ class MarketScanner:
                     self.notifier.send_signal_message(
                         ticker, 
                         sig_title, 
-                        opt_payload,
+                        opt_payload, # Pode ser None agora
                         exit_alert=exit_alert_msg
                     )
             except Exception as e:

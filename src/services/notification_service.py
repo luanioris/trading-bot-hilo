@@ -39,28 +39,35 @@ class NotificationService:
         emoji = "🚀" if "ALTA" in signal_type else "🔻"
         direction = "COMPRA (CALL)" if "ALTA" in signal_type else "VENDA (PUT)"
         
-        # Formatar valor monetário (se disponível)
-        strike_fmt = f"R$ {option_data['strike']:.2f}"
-        price_fmt = f"R$ {option_data.get('last_price', 0.0):.2f}"
-        
         msg_date = date.today().strftime('%d/%m/%Y')
-        
-        # Montar cabeçalho (com ou sem alerta de saída)
-        header = f"*{emoji} NOVO SINAL DETECTADO: {ticker}*\n📅 {msg_date}\n"
+        header = f"*{emoji} NOVO SINAL DETECTADO: {ticker}*\n📅 {msg_date}"
         
         if exit_alert:
             header = f"🚨 *ATENÇÃO: GESTÃO DE CARTEIRA*\n{exit_alert}\n\n" + header
-        
-        message_text = (
-            f"{header}\n"
-            f"📊 *Direção:* {signal_type}\n"
-            f"💎 *Sugestão:* {option_data['ticker']}\n"
-            f"💰 *Preço Opção:* {price_fmt}\n"
-            f"🎯 *Strike:* {strike_fmt} ({direction})\n"
-            f"📅 *Vencimento:* {option_data['dte']} dias\n"
-            f"🌊 *Liquidez:* {option_data.get('trades', 0)} negócios\n\n"
-            f"_Verifique o gráfico antes de operar._"
-        )
+
+        if option_data:
+            # Formatar valor monetário (se disponível)
+            strike_fmt = f"R$ {option_data['strike']:.2f}"
+            price_fmt = f"R$ {option_data.get('last_price', 0.0):.2f}"
+            
+            message_text = (
+                f"{header}\n"
+                f"📊 *Direção:* {signal_type}\n"
+                f"💎 *Sugestão:* {option_data['ticker']}\n"
+                f"💰 *Preço Opção:* {price_fmt}\n"
+                f"🎯 *Strike:* {strike_fmt} ({direction})\n"
+                f"📅 *Vencimento:* {option_data['dte']} dias\n"
+                f"🌊 *Liquidez:* {option_data.get('trades', 0)} negócios\n\n"
+                f"_Verifique o gráfico antes de operar._"
+            )
+        else:
+            # Caso sem opções
+            message_text = (
+                f"{header}\n"
+                f"📊 *Direção:* {signal_type}\n"
+                f"⚠️ *Aviso:* Oportunidade identificada, mas nenhuma opção atendeu aos critérios de filtro (Delta 0.40 ou Liquidez).\n\n"
+                f"_Acompanhe o ativo manualmente._"
+            )
         
         return self._send_whatsapp(message_text)
 
