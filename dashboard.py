@@ -460,28 +460,10 @@ elif page == "Consultar Opções":
                         if not options:
                             st.warning("Nenhuma opção encontrada para este ativo.")
                         else:
-                            # 3. Filtragem Customizada (Modo Manual)
-                            df = pd.DataFrame(options)
-                            df['expirationDate'] = pd.to_datetime(df['expirationDate'])
-                            today = pd.Timestamp.now().normalize()
-                            df['dte'] = (df['expirationDate'] - today).dt.days
-                            
-                            # Filtro A: Vencimento > 20 dias úteis (aprox 28 dias corridos)
-                            # Filtro B: Vencimento Mensal (3ª Sexta-feira -> dia 15 a 22)
-                            # Para simplificar e garantir 'tradicional', pegamos dias entre 15 e 22
-                            
-                            df_valid = df[
-                                (df['dte'] >= 28) & 
-                                (df['dte'] <= 80) & # Não pegar vencimentos muito longos
-                                (df['expirationDate'].dt.day >= 15) & 
-                                (df['expirationDate'].dt.day <= 22)
-                            ].copy()
-                            
-                            # --- MODO COMPARATIVO ---
-                            
-                            # Instanciar Seletor de Produção (Regra do Robô)
+                            # 3. USAR SELETOR CENTRALIZADO (Sem duplicação!)
+                            # Instanciar Seletor de Produção (Regra Única)
                             from src.core.options_selector import OptionsSelector
-                            prod_selector = OptionsSelector()
+                            selector = OptionsSelector()
                             
                             # Seleciona Call e Put
                             for opt_type, label, icon, signal_prod in [
@@ -493,93 +475,28 @@ elif page == "Consultar Opções":
                                 
                                 col_manual, col_auto = st.columns(2)
                                 
-                                # --- LADO ESQUERDO: REGRA MANUAL (Consultor) ---
+                                # --- LADO ESQUERDO: REGRA MANUAL (USA O MESMO SELETOR!) ---
                                 with col_manual:
                                     st.markdown("### 🛠️ Regra Manual")
-                                    st.markdown("### 🛠️ Regra Manual")
-                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40** (Foco) | Liquidez")
+                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40** (Foco) | Liquidez | **Prioriza Vencimento Mais Curto**")
                                     
-                                    # --- CALCULADORA BLACK-SCHOLES INTERNA ---
-                                    # Como a API bloqueia as gregas (VolBlur), calculamos internamente.
-                                    def calculate_bs_delta(S, K, days, r=0.1125, sigma=0.32, type_='CALL'):
-                                        """
-                                        Estima Delta usando Black-Scholes.
-                                        S: Preço Ativo, K: Strike, days: Dias úteis (DTE), r: Taxa Livre Risco (11.25%), sigma: Volatilidade (32%)
-                                        """
-                                        if days <= 0 or S <= 0 or K <= 0: return 0.0
-                                        T = days / 365.0
+                                    # Chama o seletor oficial (MESMA LÓGICA DO ROBÔ)
+                                    best_manual_dict = selector.filter_options(options, price, signal_prod)
+                                    
+                                    if best_manual_dict:
+                                        st.success(f"**{best_manual_dict['ticker']}**")
+                                        st.write(f"Strike: **R$ {best_manual_dict['strike']:.2f}**")
                                         try:
-                                            d1 = (math.log(S/K) + (r + 0.5*sigma**2)*T) / (sigma*math.sqrt(T))
-                                            # Aproximação da CDF Normal usando math.erf
-                                            cdf_d1 = 0.5 * (1 + math.erf(d1 / math.sqrt(2)))
-                                            
-                                            if type_ == 'CALL':
-                                                return cdf_d1
-                                            else:
-                                                return cdf_d1 - 1
-                                        except Exception:
-                                            return 0.0
-
-                                    # Filtra dados para Manual
-                                    df_type = df_valid[df_valid['type'] == opt_type].copy()
-                                    
-                                    if df_type.empty:
-                                        st.warning("Sem opções disponíveis.")
+                                            d_manual = pd.to_datetime(best_manual_dict['expiration']).strftime('%d/%m/%Y')
+                                        except:
+                                            d_manual = best_manual_dict['expiration']
+                                        st.write(f"Vencimento: {d_manual} ({best_manual_dict['dte']}d)")
+                                        st.write(f"Liquidez: {best_manual_dict['trades']} negócios")
+                                        st.write(f"Último: R$ {best_manual_dict['last_price']:.2f}")
+                                        st.caption(f"✅ **Delta Estimado: {best_manual_dict['delta_bs']:.3f}** (Vol Fixa 32%)")
+                                        st.success("✅ As regras coincidem!")
                                     else:
-                                        # Calcular Delta Estimado para todas as candidatas
-                                        # Assumimos Volatilidade Fixa de 32% (Média razoável para BRKM/SUZB/VALE)
-                                        df_type['delta_bs'] = df_type.apply(
-                                            lambda row: calculate_bs_delta(
-                                                S=price, 
-                                                K=row['strike'], 
-                                                days=row['dte'], 
-                                                type_=row['type']
-                                            ), axis=1
-                                        )
-                                        
-                                        # LÓGICA ROBUSTA: Range Delta 0.40 - 0.53
-                                        if opt_type == "CALL":
-                                            mask = (df_type['delta_bs'] >= 0.39) & (df_type['delta_bs'] <= 0.53)
-                                            target_delta = 0.40 # Foco em 0.40
-                                        else:
-                                            # Put: -0.53 a -0.40
-                                            mask = (df_type['delta_bs'] >= -0.53) & (df_type['delta_bs'] <= -0.39)
-                                            target_delta = -0.40
-                                            
-                                        candidates = df_type[mask].copy()
-                                        
-                                        if candidates.empty:
-                                            st.warning(f"Nenhuma opção com Delta Estimado entre 0.40-0.50.")
-                                            # Mostrar sugestões próximas?
-                                            # st.write(df_type[['strike', 'delta_bs']].sort_values('delta_bs').head())
-                                        else:
-                                            # Filtrar liquidez
-                                            if 'trades' not in candidates.columns:
-                                                candidates['trades'] = 0
-                                            candidates = candidates[candidates['trades'] > 0]
-                                            
-                                            if candidates.empty:
-                                                st.warning("Opções no range de Delta existem, mas sem liquidez.")
-                                            else:
-                                                # Ordenar por proximidade ao Delta Alvo (0.40), depois Liquidez
-                                                candidates['dist_to_target'] = abs(candidates['delta_bs'] - target_delta)
-                                                
-                                                candidates = candidates.sort_values(
-                                                    by=['dist_to_target', 'trades'],
-                                                    ascending=[True, False]
-                                                )
-                                                
-                                                best_manual = candidates.iloc[0]
-                                                
-                                                expire_fmt = best_manual['expirationDate'].strftime('%d/%m/%Y')
-                                                st.success(f"**{best_manual['stock']}**")
-                                                st.write(f"Strike: **R$ {best_manual['strike']:.2f}**")
-                                                st.write(f"Vencimento: {expire_fmt} ({best_manual['dte']}d)")
-                                                st.write(f"Liquidez: {int(best_manual.get('trades', 0) or 0)} negócios")
-                                                st.write(f"Último: R$ {best_manual.get('lastPrice', 0):.2f}")
-                                                
-                                                d_val = best_manual['delta_bs']
-                                                st.caption(f"✅ **Delta Estimado: {d_val:.3f}** (Vol Fixa 32%)")
+                                        st.warning("Nenhuma opção atende aos critérios.")
 
 
                                 # --- LADO DIREITO: REGRA PRODUÇÃO (Robô) ---
@@ -587,30 +504,21 @@ elif page == "Consultar Opções":
                                     st.markdown("### 🤖 Regra do Robô")
                                     st.caption("Filtro atual em Produção (OptionsSelector.py)")
                                     
-                                    # Chama o seletor oficial
-                                    # O seletor espera uma lista de dicts crua da Brapi
-                                    best_auto_dict = prod_selector.filter_options(options, price, signal_prod)
+                                    # Chama o seletor oficial (MESMA INSTÂNCIA)
+                                    best_auto_dict = selector.filter_options(options, price, signal_prod)
                                     
                                     if best_auto_dict:
                                         st.info(f"**{best_auto_dict['ticker']}**")
                                         st.write(f"Strike: **R$ {best_auto_dict['strike']:.2f}**")
-                                        # Converter string data se necessário
                                         try:
                                             d_auto = pd.to_datetime(best_auto_dict['expiration']).strftime('%d/%m/%Y')
                                         except:
                                             d_auto = best_auto_dict['expiration']
-                                            
                                         st.write(f"Vencimento: {d_auto} ({best_auto_dict['dte']}d)")
                                         st.write(f"Liquidez: {best_auto_dict['trades']} negócios")
                                         st.write(f"Último: R$ {best_auto_dict['last_price']:.2f}")
-                                        
-                                        # Comparação Rápida
-                                        # best_manual existe apenas no bloco else acima, cuidado com escopo
-                                        if 'best_manual' in locals():
-                                             if best_manual['stock'] == best_auto_dict['ticker']:
-                                                 st.caption("✅ As regras coincidem!")
-                                             else:
-                                                 st.caption("⚠️ As regras escolheram ativos diferentes.")
+                                        st.caption(f"✅ **Delta: {best_auto_dict['delta_bs']:.3f}**")
+                                        st.info("✅ As regras coincidem!")
                                     else:
                                         st.warning("Robô não encontrou opção viável com as regras atuais.")
 
