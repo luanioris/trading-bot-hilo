@@ -13,26 +13,32 @@ class OpcoesNetClient:
     
     BASE_URL = "https://opcoes.net.br/listaopcoes/completa"
     
+    
     def get_options_chain(self, ticker: str):
         print(f"\t🔌 Conectando Opcoes.net.br para {ticker}...")
         
-        # 1. Obter Vencimentos usando o endpoint "Completa" que sabemos que funciona
+        # 1. Obter Vencimentos
         vencimentos = self._get_vencimentos_robust(ticker)
         if not vencimentos:
             print("\t⚠️ Não foi possível obter vencimentos.")
             return []
             
-        # 2. Encontrar Vencimento Ideal (entre 25 e 45 dias)
-        target_vencimento = self._select_ideal_expiration(vencimentos)
+        # 2. Buscar TODOS os vencimentos mensais válidos (28-80 dias)
+        # Deixar o OptionsSelector escolher qual é o melhor
+        all_options = []
         
-        if not target_vencimento:
-            print("\t⚠️ Sem vencimentos na janela ideal. Pegando o segundo mais próximo.")
-            target_vencimento = vencimentos[1] if len(vencimentos) > 1 else vencimentos[0]
+        for v in vencimentos:
+            # Filtro: Mensal (dia 15-22) e DTE 28-80
+            is_monthly = 15 <= v['date'].day <= 22
+            in_range = 28 <= v['dte'] <= 80
             
-        print(f"\t📅 Vencimento Alvo: {target_vencimento['value']} (DTE: {target_vencimento['dte']}d)")
+            if is_monthly and in_range:
+                print(f"\t📅 Buscando vencimento: {v['value']} (DTE: {v['dte']}d)")
+                opts = self._fetch_options_by_expiration(ticker, v['value'])
+                all_options.extend(opts)
         
-        # 3. Buscar Grade
-        return self._fetch_options_by_expiration(ticker, target_vencimento['value'])
+        print(f"\t✅ Total de opções retornadas: {len(all_options)}")
+        return all_options
 
     def _get_vencimentos_robust(self, ticker):
         """Busca JSON de vencimentos disponíveis usando a rota principal"""
