@@ -101,14 +101,40 @@ class OptionsSelector:
             print(f"⚠️ Opções encontradas no Delta, mas sem liquidez.")
             return None
 
-        # Ordenar: Mais próximo do Delta 0.40 (User Request), desempate por Liquidez
-        # O usuário quer priorizar o delta mais próximo de 0.40 e ir subindo.
+        # --- NOVA LÓGICA DE ORDENAÇÃO: WATERFALL POR VENCIMENTO ---
+        # 1. Agrupar por Vencimento (Crescente)
+        # 2. Verificar se no vencimento mais curto existe opção com Delta "Aceitável" (0.40 a 0.55)
+        # 3. Se sim, escolhe a melhor desse vencimento. Se não, pula para o próximo.
+        
         candidates['dist_to_target'] = abs(candidates['delta_bs'] - target_delta)
         
-        best_option = candidates.sort_values(
-            by=['dist_to_target', 'trades'],
-            ascending=[True, False]
-        ).iloc[0]
+        # Identificar vencimentos únicos em ordem
+        unique_expirations = sorted(candidates['expirationDate'].unique())
+        
+        selected_option = None
+        
+        for exp_date in unique_expirations:
+            # Opções deste vencimento
+            subset = candidates[candidates['expirationDate'] == exp_date].copy()
+            
+            # Verificar se tem alguma no range "Aceitável"
+            # O filtro hard já garantiu 0.39-0.53, então qualquer uma aqui é tecnicamente aceitável
+            # Mas podemos forçar a melhor delas
+            
+            # Ordenar subset: Melhor Delta -> Liquidez
+            subset = subset.sort_values(by=['dist_to_target', 'trades'], ascending=[True, False])
+            
+            if not subset.empty:
+                # Encontramos uma candidata no vencimento mais curto possível!
+                # Como o filtro inicial já é restrito (0.40 delta approx), podemos pegar a top deste vencimento.
+                selected_option = subset.iloc[0]
+                break
+        
+        if selected_option is None:
+             # Fallback (não deve acontecer dado o filtro anterior)
+             selected_option = candidates.sort_values(by=['dist_to_target'], ascending=[True]).iloc[0]
+
+        best_option = selected_option
 
         return {
             "type": best_option['type'],
