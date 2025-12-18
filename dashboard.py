@@ -460,10 +460,12 @@ elif page == "Consultar Opções":
                         if not options:
                             st.warning("Nenhuma opção encontrada para este ativo.")
                         else:
-                            # 3. USAR SELETOR CENTRALIZADO (Sem duplicação!)
-                            # Instanciar Seletor de Produção (Regra Única)
+                            # 3. USAR SELETOR DE PRODUÇÃO (Mesmo usado pelo Cron)
                             from src.core.options_selector import OptionsSelector
                             selector = OptionsSelector()
+                            
+                            st.info("🤖 **Usando OptionsSelector.py** - Mesma lógica executada pelo robô no cron diário")
+                            st.caption("Filtro: DTE 28-80 dias | Vencimento Mensal (dia 15-22) | Delta 0.40-0.53 | **Prioriza vencimento mais curto**")
                             
                             # Seleciona Call e Put
                             for opt_type, label, icon, signal_prod in [
@@ -473,54 +475,26 @@ elif page == "Consultar Opções":
                                 st.divider()
                                 st.subheader(f"{icon} Oportunidade para {label} ({opt_type})")
                                 
-                                col_manual, col_auto = st.columns(2)
+                                # Chama o seletor de produção
+                                result = selector.filter_options(options, price, signal_prod)
                                 
-                                # --- LADO ESQUERDO: REGRA MANUAL (USA O MESMO SELETOR!) ---
-                                with col_manual:
-                                    st.markdown("### 🛠️ Regra Manual")
-                                    st.caption("Filtro: Vencimento Mensal | **Delta Estimado 0.40** (Foco) | Liquidez | **Prioriza Vencimento Mais Curto**")
+                                if result:
+                                    st.success(f"**{result['ticker']}**")
+                                    st.write(f"**Strike:** R$ {result['strike']:.2f}")
+                                    try:
+                                        d_fmt = pd.to_datetime(result['expiration']).strftime('%d/%m/%Y')
+                                    except:
+                                        d_fmt = result['expiration']
+                                    st.write(f"**Vencimento:** {d_fmt} ({result['dte']} dias)")
+                                    st.write(f"**Liquidez:** {result['trades']} negócios")
+                                    st.write(f"**Último:** R$ {result['last_price']:.2f}")
+                                    st.write(f"**Delta:** {result['delta_bs']:.3f} (Vol. Implícita 32%)")
                                     
-                                    # Chama o seletor oficial (MESMA LÓGICA DO ROBÔ)
-                                    best_manual_dict = selector.filter_options(options, price, signal_prod)
-                                    
-                                    if best_manual_dict:
-                                        st.success(f"**{best_manual_dict['ticker']}**")
-                                        st.write(f"Strike: **R$ {best_manual_dict['strike']:.2f}**")
-                                        try:
-                                            d_manual = pd.to_datetime(best_manual_dict['expiration']).strftime('%d/%m/%Y')
-                                        except:
-                                            d_manual = best_manual_dict['expiration']
-                                        st.write(f"Vencimento: {d_manual} ({best_manual_dict['dte']}d)")
-                                        st.write(f"Liquidez: {best_manual_dict['trades']} negócios")
-                                        st.write(f"Último: R$ {best_manual_dict['last_price']:.2f}")
-                                        st.caption(f"✅ **Delta Estimado: {best_manual_dict['delta_bs']:.3f}** (Vol Fixa 32%)")
-                                        st.success("✅ As regras coincidem!")
-                                    else:
-                                        st.warning("Nenhuma opção atende aos critérios.")
-
-
-                                # --- LADO DIREITO: REGRA PRODUÇÃO (Robô) ---
-                                with col_auto:
-                                    st.markdown("### 🤖 Regra do Robô")
-                                    st.caption("Filtro atual em Produção (OptionsSelector.py)")
-                                    
-                                    # Chama o seletor oficial (MESMA INSTÂNCIA)
-                                    best_auto_dict = selector.filter_options(options, price, signal_prod)
-                                    
-                                    if best_auto_dict:
-                                        st.info(f"**{best_auto_dict['ticker']}**")
-                                        st.write(f"Strike: **R$ {best_auto_dict['strike']:.2f}**")
-                                        try:
-                                            d_auto = pd.to_datetime(best_auto_dict['expiration']).strftime('%d/%m/%Y')
-                                        except:
-                                            d_auto = best_auto_dict['expiration']
-                                        st.write(f"Vencimento: {d_auto} ({best_auto_dict['dte']}d)")
-                                        st.write(f"Liquidez: {best_auto_dict['trades']} negócios")
-                                        st.write(f"Último: R$ {best_auto_dict['last_price']:.2f}")
-                                        st.caption(f"✅ **Delta: {best_auto_dict['delta_bs']:.3f}**")
-                                        st.info("✅ As regras coincidem!")
-                                    else:
-                                        st.warning("Robô não encontrou opção viável com as regras atuais.")
+                                    # Highlight se for vencimento curto
+                                    if result['dte'] < 40:
+                                        st.success("✅ Vencimento prioritário selecionado (< 40 dias)")
+                                else:
+                                    st.warning(f"Nenhuma opção {opt_type} atende aos critérios de filtro.")
 
                 except Exception as e:
                     st.error(f"Erro ao processar: {e}")
