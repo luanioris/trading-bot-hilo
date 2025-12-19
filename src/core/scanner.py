@@ -32,7 +32,34 @@ class MarketScanner:
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], unit='s', errors='coerce')
         
-        # 3. Aplicar HiLo com período dinâmico (usando dados históricos puros)
+        # --- ETAPA CRÍTICA: LIMPEZA DE DADOS (DATA SANITIZATION) ---
+        # A Brapi às vezes retorna o candle de hoje incompleto no histórico.
+        # Isso destrói o cálculo de médias (HiLo). DEVEMOS REMOVÊ-LO.
+        
+        # 1. Remove candle de "Hoje" se existir (garante D-1)
+        today_date = pd.Timestamp.now().normalize()
+        if not df.empty and df.iloc[-1]['date'].normalize() == today_date:
+            print(f"\t🧹 Removendo candle incompleto de hoje ({df.iloc[-1]['date'].strftime('%d/%m')}) do histórico.")
+            df = df.iloc[:-1].copy()
+            
+        # 2. Remove candles inválidos (High == Low e Volume 0) que são erro de dados
+        # O HiLo depende da volatilidade (High-Low). Candles flat distorcem a média.
+        params_invalid = (df['high'] == df['low']) & (df['close'] > 0)
+        if params_invalid.any():
+            invalid_count = params_invalid.sum()
+            # Se for apenas 1 ou 2 dias isolados, removemos. Se for muitos, abortamos.
+            if invalid_count < 5:
+                # print(f"\t🧹 Removendo {invalid_count} candles 'flat' (High=Low) do histórico.")
+                df = df[~params_invalid].copy()
+            else:
+                print(f"\t⚠️ ALERTA CRÍTICO: Dados históricos de {ticker} parecem corrompidos ({invalid_count} dias flat). Abortando.")
+                return None
+            
+        if df.empty:
+            print(f"\t⚠️ Sem dados históricos suficientes após limpeza para {ticker}.")
+            return None
+
+        # 3. Aplicar HiLo com período dinâmico (usando dados históricos puros e limpos)
         df_hilo = Indicators.calculate_hilo(df, period=self.hilo_period)
         
         # 4. Analisar último candle HISTÓRICO

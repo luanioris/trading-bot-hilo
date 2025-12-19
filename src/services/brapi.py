@@ -1,4 +1,7 @@
 import requests
+import pandas as pd
+from datetime import datetime
+import yfinance as yf
 from src.config import Config
 from src.services.opcoes_net import OpcoesNetClient
 
@@ -76,90 +79,67 @@ class BrapiClient:
             pass
         return {'longName': None, 'sector': None}
 
-    def get_historical_data(self, ticker: str, range: str = "3mo", interval: str = "1d", include_today: bool = True):
-        """
-        Busca dados históricos (candles) para um ticker.
-        Se include_today=True, adiciona um candle sintético com a cotação atual.
-        """
-        from datetime import datetime, date as dt_date
-        import time
-        
-        params = {
-            'token': self.token,
-            'range': range,
-            'interval': interval,
-            'fundamental': 'false',
-        }
-        url = f"{self.BASE_URL}/quote/{ticker}"
-        
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        
-        if 'results' not in data or not data['results']:
-            print(f"⚠️ Sem dados para {ticker}")
-            return None
 
-        result = data['results'][0]
-        historical = result.get('historicalDataPrice', [])
-        
-        # Sanitize data: Ensure High and Low are never 0
-        for candle in historical:
-            o = candle.get('open', 0)
-            h = candle.get('high', 0)
-            l = candle.get('low', 0)
-            c = candle.get('close', 0)
+    
+    def get_historical_data(self, ticker: str, range: str = '3mo', interval: str = '1d', include_today: bool = False):
+        """
+        Busca candles históricos.
+        SUBSTITUÍDO POR YFINANCE (Dados Ajustados) para garantir consistência com ProfitChart.
+        Mantém interface original da Brapi.
+        """
+        try:
+            # print(f"\t🔄 [YF] Buscando histórico ajustado de {ticker} ({range})...")
             
-            # Se High ou Low estiverem zerados, corrigir
-            if h <= 0 or l <= 0:
-                print(f"\t⚠️ Dados inconsistentes para {ticker} em {datetime.fromtimestamp(candle['date']).strftime('%d/%m/%Y')}: H={h}, L={l}. Corrigindo...")
-                
-                # Se open for 0, usa close como fallback
-                if o <= 0:
-                    o = c
-                    candle['open'] = o
-                
-                valid_vals = [x for x in [o, c] if x > 0]
-                if valid_vals:
-                    # Se High inválido, pega o maior entre open e close
-                    if h <= 0:
-                        candle['high'] = max(valid_vals)
-                    # Se Low inválido, pega o menor entre open e close
-                    if l <= 0:
-                        candle['low'] = min(valid_vals)
-                    
-                    # Garantir integridade básica (H >= L)
-                    if candle['high'] < candle['low']:
-                         candle['high'] = candle['low']
+            # Adicionar sufixo .SA se não tiver
+            yf_ticker = f"{ticker}.SA" if not ticker.endswith(".SA") else ticker
+            
+            # Mapeamento de ranges da API Brapi -> YFinance
+            # (Geralmente são compatíveis: 1d, 5d, 1mo, 3mo, 6mo, 1y, 5y, max)
+            
+            # Baixar dados (auto_adjust=True garante Split/Dividendos ajustados)
+            # progress=False desativa barra de progresso do YF
+            df = yf.download(yf_ticker, period=range, interval=interval, auto_adjust=True, progress=False, multi_level_index=False)
+            
+            if df.empty:
+                print(f"⚠️ YFinance retornou vazio para {ticker}")
+                return []
 
-        # Se quiser incluir dados de hoje
-        if include_today and historical:
-            last_candle_date = datetime.fromtimestamp(historical[-1]['date']).date()
-            today = dt_date.today()
-            
-            # Se o último candle não é de hoje, criar candle sintético
-            if last_candle_date < today:
-                # Buscar cotação atual (tempo real)
-                current_price = result.get('regularMarketPrice')
+            # Tratar include_today
+            if not include_today:
+                today = pd.Timestamp.now().normalize()
+                # Remove se o último registro for de hoje
+                if df.index[-1].normalize() == today:
+                    # print(f"\t🧹 [YF] Removendo candle de hoje ({df.index[-1].date()})")
+                    df = df.iloc[:-1]
+
+            results = []
+            for date, row in df.iterrows():
+                # Converter para formato padrão do sistema (Timestamp Unix)
+                # YFinance date é Timestamp. timestamp() retorna float.
+                ts = int(date.timestamp())
                 
-                if current_price and current_price > 0:
-                    # Criar candle sintético de hoje
-                    # Timestamp de hoje às 18h (fechamento aproximado)
-                    today_timestamp = int(datetime.combine(today, datetime.min.time()).timestamp())
-                    
-                    synthetic_candle = {
-                        'date': today_timestamp,
-                        'open': current_price,  # Aproximação
-                        'high': current_price,  # Aproximação
-                        'low': current_price,   # Aproximação  
-                        'close': current_price,
-                        'volume': 0,  # Não temos volume intraday
-                        'adjustedClose': current_price
-                    }
-                    
-                    historical.append(synthetic_candle)
-                    print(f"\t✅ Candle sintético de hoje criado para {ticker} (R$ {current_price:.2f})")
-                else:
-                    print(f"\t⚠️ Cotação atual não disponível para {ticker}")
-        
-        return historical
+                # Tratamento seguro de NaN
+                val_close = float(row['Close']) if pd.notnull(row['Close']) else 0.0
+                val_open = float(row['Open']) if pd.notnull(row['Open']) else val_close
+                val_high = float(row['High']) if pd.notnull(row['High']) else val_close
+                val_low = float(row['Low']) if pd.notnull(row['Low']) else val_close
+                
+                # Sanity Check para High/Low Zeros (Raríssimo no YF Ajustado, mas mantendo a lógica)
+                if val_high == 0.0 or val_low == 0.0:
+                     val_high = max(val_open, val_close)
+                     val_low = min(val_open, val_close)
+
+                results.append({
+                    'date': ts,
+                    'open': val_open,
+                    'high': val_high,
+                    'low': val_low,
+                    'close': val_close,
+                    'volume': int(row['Volume']) if pd.notnull(row['Volume']) else 0
+                })
+                
+            return results
+
+        except Exception as e:
+            print(f"❌ Erro ao buscar histórico via YFinance: {e}")
+            return []
